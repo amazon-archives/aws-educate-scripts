@@ -1,0 +1,170 @@
+{  
+   "AWSTemplateFormatVersion":"2010-09-09",
+   "Description":"AWS CloudFormation Template EC2InstanceWithSecurityGroup: Create an Amazon EC2 instance running the Amazon Linux AMI. The AMI is chosen based on the region in which the stack is run (currently us-east-1). This template creates an EC2 instance and security group for the instance in AWS environment to give SSH access. It also uses user-data to create a user with a sudo access in the instance. **WARNING** This template creates an Amazon EC2 instance. You will be billed for the AWS resources used if you create a stack from this template.",
+   "Parameters":{  
+      "UserName":{  
+         "Type":"String",
+         "Default":"testuser"
+      },
+      "SSHPublicKey":{  
+         "Type":"String"
+      },
+      "InstanceType":{  
+         "Description":"EC2 instance type",
+         "Type":"String",
+         "Default":"t2.micro",
+         "AllowedValues":[  
+            "t2.micro",
+            "t2.small",
+            "t2.medium",
+            "m3.medium",
+            "m3.large"
+         ],
+         "ConstraintDescription":"must be a valid EC2 instance type."
+      },
+      "SSHAllowedFrom":{  
+         "Description":"The IP address range that can be used to SSH to the EC2 instances",
+         "Type":"String",
+         "MinLength":"9",
+         "MaxLength":"18",
+         "Default":"140.247.0.0/0",
+         "AllowedPattern":"(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+         "ConstraintDescription":"must be a valid IP CIDR range of the form x.x.x.x/x."
+      }
+   },
+   "Mappings":{  
+      "AWSInstanceType2Arch":{  
+         "t2.micro":{  
+            "Arch":"HVM64"
+         },
+         "t2.small":{  
+            "Arch":"HVM64"
+         },
+         "t2.medium":{  
+            "Arch":"HVM64"
+         },
+         "m3.medium":{  
+            "Arch":"HVM64"
+         },
+         "m3.large":{  
+            "Arch":"HVM64"
+         }
+      },
+      "AWSRegionArch2AMI":{  
+         "us-east-1":{  
+            "HVM64":"ami-354cfd5e"
+         }
+      }
+   },
+   "Resources":{  
+      "EC2Instance":{  
+         "Type":"AWS::EC2::Instance",
+         "Properties":{  
+            "InstanceType":{  
+               "Ref":"InstanceType"
+            },
+            "SecurityGroups":[  
+               {  
+                  "Ref":"InstanceSecurityGroup"
+               }
+            ],
+            "ImageId":{  
+               "Fn::FindInMap":[  
+                  "AWSRegionArch2AMI",
+                  {  
+                     "Ref":"AWS::Region"
+                  },
+                  {  
+                     "Fn::FindInMap":[  
+                        "AWSInstanceType2Arch",
+                        {  
+                           "Ref":"InstanceType"
+                        },
+                        "Arch"
+                     ]
+                  }
+               ]
+            },
+            "UserData":{  
+               "Fn::Base64":{  
+                  "Fn::Join":[  
+                     "",
+                     [  
+                        "#!/bin/bash -v\n",
+                        "USERNAME=",
+                        {  
+                           "Ref":"UserName"
+                        },
+                        "\n",
+                        "SSHKEY=\"",
+                        {  
+                           "Ref":"SSHPublicKey"
+                        },
+                        "\"\n",
+                        "groupadd students\n",
+                        "useradd -m -g students $USERNAME\n",
+                        "mkdir -p /home/$USERNAME/.ssh\n",
+                        "echo $SSHKEY >> /home/$USERNAME/.ssh/authorized_keys\n",
+                        "chmod 700 /home/$USERNAME/.ssh\n",
+                        "chmod 600 /home/$USERNAME/.ssh/authorized_keys\n",
+                        "chown -R $USERNAME:students /home/$USERNAME/.ssh\n",
+                        "echo \"$USERNAME ALL=(ALL) NOPASSWD: ALL\" > /etc/sudoers.d/2_$USERNAME"
+                     ]
+                  ]
+               }
+            }
+         }
+      },
+      "InstanceSecurityGroup":{  
+         "Type":"AWS::EC2::SecurityGroup",
+         "Properties":{  
+            "GroupDescription":"Enable SSH access via port 22",
+            "SecurityGroupIngress":[  
+               {  
+                  "IpProtocol":"tcp",
+                  "FromPort":"22",
+                  "ToPort":"22",
+                  "CidrIp":{  
+                     "Ref":"SSHAllowedFrom"
+                  }
+               }
+            ]
+         }
+      }
+   },
+   "Outputs":{  
+      "InstanceId":{  
+         "Description":"InstanceId of the newly created EC2 instance",
+         "Value":{  
+            "Ref":"EC2Instance"
+         }
+      },
+      "AZ":{  
+         "Description":"Availability Zone of the newly created EC2 instance",
+         "Value":{  
+            "Fn::GetAtt":[  
+               "EC2Instance",
+               "AvailabilityZone"
+            ]
+         }
+      },
+      "PublicDNS":{  
+         "Description":"Public DNSName of the newly created EC2 instance",
+         "Value":{  
+            "Fn::GetAtt":[  
+               "EC2Instance",
+               "PublicDnsName"
+            ]
+         }
+      },
+      "PublicIP":{  
+         "Description":"Public IP address of the newly created EC2 instance",
+         "Value":{  
+            "Fn::GetAtt":[  
+               "EC2Instance",
+               "PublicIp"
+            ]
+         }
+      }
+   }
+}
